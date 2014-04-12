@@ -43,14 +43,14 @@ progName = "roger"
 
 timeSpecAllows :: TimeSpec -> Int -> Bool
 timeSpecAllows spec n = isAnInstance && allowedForEvery
-  where isAnInstance = case (instances spec) of
+  where isAnInstance = case instances spec of
                          [] -> True
                          is -> n `elem` is
         sEvery = every spec
         allowedForEvery = sEvery == 0 || (n `mod` sEvery == 0)
 
 parseTimeSpec :: TimeSpecUnits -> String -> TimeSpec
-parseTimeSpec units s = case (parse parser "" s) of
+parseTimeSpec units s = case parse parser "" s of
                         Left err   -> throw $
                           TimeSpecParseException units err
                         Right spec -> spec
@@ -112,31 +112,30 @@ timeSpecForUnits specs u = case filter (\s -> (units s) == u) specs of
                              [s] -> Just s
                              _   -> error $ "multiple specs for " ++ (show u)
 
-mainLoop minsSpec hoursSpec cmd flags = do
-  forever $ do
-    zonedTime <- getCurrentTime >>= utcToLocalZonedTime
-    when (shouldRunCmd (zonedTimeToLocalTime zonedTime)) $ do
-      verbosePrintLn "Running command..."
-      (_, _, _, cmdH) <- createProcess cmd
-      exitCode <- waitForProcess cmdH
-      case exitCode of
-        ExitSuccess -> verbosePrintLn "Exited successfully"
-        ExitFailure n -> verbosePrintLn $ "Exited with error code: " ++ (show n)
-    threadDelay 1000000 -- microseconds, so one second
+mainLoop minsSpec hoursSpec cmd flags = forever $ do
+  zonedTime <- getCurrentTime >>= utcToLocalZonedTime
+  when (shouldRunCmd (zonedTimeToLocalTime zonedTime)) $ do
+    verbosePrintLn "Running command..."
+    (_, _, _, cmdH) <- createProcess cmd
+    exitCode <- waitForProcess cmdH
+    case exitCode of
+      ExitSuccess -> verbosePrintLn "Exited successfully"
+      ExitFailure n -> verbosePrintLn $ "Exited with error code: " ++ (show n)
+  threadDelay 1000000 -- microseconds, so one second
   where isVerbose = Verbose `elem` flags
         verbosePrintLn s = when isVerbose $ putStrLn s
         shouldRunCmd localTime = let t = localTimeOfDay localTime
                                      hours = todHour t
                                      mins = todMin t
                                      secs = todSec t
-                                     allowed spec n = maybe True (flip timeSpecAllows $ n) spec
+                                     allowed spec n = maybe True (flip timeSpecAllows n) spec
                                      in
           (floor secs) == 0 &&
             all (uncurry allowed) [(minsSpec, mins), (hoursSpec, hours)]
 
 main' = do
   (flags, args) <- parseArgv <$> getArgs
-  when (args == []) $ error "no command given"
+  when (null args) $ error "no command given"
 
   cmdspec <- getCmdSpec flags args
   let cmd = CreateProcess {cmdspec, cwd = Nothing, env = Nothing,
