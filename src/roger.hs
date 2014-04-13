@@ -4,7 +4,7 @@
 module Main where
 
 import Control.Concurrent (threadDelay)
-import Control.Monad (forever, when)
+import Control.Monad (forever, when, void)
 import Control.Exception (Exception, SomeException, throw, catch)
 import Data.Char (toLower)
 import Data.Functor
@@ -38,6 +38,7 @@ instance Show TimeSpecParseException where
       (show err)
 
 
+progName :: String
 progName = "roger"
 
 
@@ -69,14 +70,14 @@ parseTimeSpec units s = case parse parser "" s of
                         instanceP = try instanceRangeP <|> singleInstanceP
                         instanceRangeP = do
                           start <- many1 digit
-                          char '-'
+                          void $ char '-'
                           end <- many1 digit
                           return [readInt start..readInt end]
                         singleInstanceP = do
                           i <- many1 digit
                           return [readInt i]
                         everyP = do
-                          char '/'
+                          void $ char '/'
                           e <- many1 digit
                           return $ readInt e
                         readInt :: String -> Int
@@ -101,6 +102,7 @@ parseArgv argv =
      (_, _ , errs) -> error $ concat errs ++ usageInfo header options
   where header = "Usage: roger [OPTION...] cmdargs..."
 
+extractTimeSpecs :: [Flag] -> [TimeSpec]
 extractTimeSpecs = foldl ex []
   where ex specs flag = case flag of
                           TimeSpecFlag spec -> spec : specs
@@ -112,6 +114,7 @@ timeSpecForUnits specs u = case filter (\s -> (units s) == u) specs of
                              [s] -> Just s
                              _   -> error $ "multiple specs for " ++ (show u)
 
+mainLoop :: Maybe TimeSpec -> Maybe TimeSpec -> CreateProcess -> [Flag] -> IO ()
 mainLoop minsSpec hoursSpec cmd flags = forever $ do
   zonedTime <- getCurrentTime >>= utcToLocalZonedTime
   when (shouldRunCmd (zonedTimeToLocalTime zonedTime)) $ do
@@ -130,9 +133,10 @@ mainLoop minsSpec hoursSpec cmd flags = forever $ do
                                      secs = todSec t
                                      allowed spec n = maybe True (flip timeSpecAllows n) spec
                                      in
-          (floor secs) == 0 &&
+          (floor secs) == (0 :: Integer) &&
             all (uncurry allowed) [(minsSpec, mins), (hoursSpec, hours)]
 
+main' :: IO ()
 main' = do
   (flags, args) <- parseArgv <$> getArgs
   when (null args) $ error "no command given"
@@ -156,4 +160,5 @@ main' = do
 mainErrHandler :: SomeException -> IO ()
 mainErrHandler e = putStrLn (progName ++ ": " ++ show e) >> exitFailure
 
+main :: IO ()
 main = catch main' mainErrHandler
